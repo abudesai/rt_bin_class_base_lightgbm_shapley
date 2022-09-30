@@ -24,7 +24,7 @@ Model explainability is provided using Shapley values. Local explanations at eac
 
 The data preprocessing step includes missing data imputation, standardization, one-hot encoding for categorical variables, datatype casting, etc. The missing categorical values are imputed using the most frequent value if they are rare. Otherwise if the missing value is frequent, they are give a "missing" label instead. Missing numerical values are imputed using the mean and a binary column is added to show a 'missing' indicator for the missing values. Numerical values are also scaled using a Yeo-Johnson transformation in order to get the data close to a Gaussian distribution.
 
-Hyperparameter Tuning (HPT) is conducted on LightGBM's 4 hyperparameters: boosting_type, n_estimators, um_leaves, and learning_rate.
+Hyperparameter Tuning (HPT) is conducted on LightGBM's 4 hyperparameters: boosting_type, n_estimators, num_leaves, and learning_rate.
 
 During the model development process, the algorithm was trained and evaluated on a variety of datasets such as email spam detection, customer churn, credit card fraud detection, cancer diagnosis, and titanic passanger survivor prediction.
 
