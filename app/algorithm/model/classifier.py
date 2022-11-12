@@ -22,7 +22,8 @@ class Classifier():
         
         
     def build_model(self, **kwargs): 
-        model = lgb.LGBMClassifier(
+        model = lgb.LGBMClassifier(            
+            num_class =1,
             boosting_type = self.boosting_type,
             num_leaves = self.num_leaves,
             learning_rate = self.learning_rate,
