@@ -36,8 +36,7 @@ class ModelServer:
         return self.model
 
     def _get_predictions(self, data):
-        """
-        Returns the predicted class
+        """ Returns the predicted class probilities
         """
         preprocessor = self._get_preprocessor()
         model = self._get_model()
@@ -57,18 +56,22 @@ class ModelServer:
 
 
     def predict_proba(self, data):
-        """
-        Returns predicted probabilities of each class
-        """
+        """ Returns predicted probabilities of each class """
         preds = self._get_predictions(data)
-        class_names = pipeline.get_class_names(self.preprocessor, model_cfg)
-        
+        class_names = pipeline.get_class_names(self.preprocessor, model_cfg)        
         preds_df = data[[self.id_field_name]].copy()
         preds_df[class_names] = preds
-        # preds_df[class_names[0]] = 1 - preds
-        # preds_df[class_names[1]] = preds
-        # print(preds_df)
         return preds_df
+
+
+    def predict(self, data):        
+        class_names = pipeline.get_class_names(self.preprocessor, model_cfg)
+        preds_df = data[[self.id_field_name]].copy()
+        preds_df["prediction"] = pd.DataFrame(
+            self.predict_proba(data), columns=class_names
+        ).idxmax(axis=1)
+        return preds_df
+
 
     def predict_to_json(self, data):
         preds_df = self.predict_proba(data)
@@ -93,15 +96,6 @@ class ModelServer:
         return predictions_response
 
 
-    def predict(self, data):        
-        class_names = pipeline.get_class_names(self.preprocessor, model_cfg)
-        preds_df = data[[self.id_field_name]].copy()
-        preds_df["prediction"] = pd.DataFrame(
-            self.predict_proba(data), columns=class_names
-        ).idxmax(axis=1)
-        return preds_df
-
-
     def _get_target_class_proba(self, X):
         """
         Returns predicted probability of the target class
@@ -109,7 +103,7 @@ class ModelServer:
         model = self._get_model()
         preds = model.predict_proba(X)
         return preds[:, 1]
-        
+
 
     def explain_local(self, data):
 
