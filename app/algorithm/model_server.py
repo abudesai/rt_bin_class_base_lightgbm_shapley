@@ -52,29 +52,27 @@ class ModelServer:
         # Grab input features for prediction
         pred_X = proc_data["X"].astype(np.float)
         # make predictions
-        preds = model.predict(pred_X)
+        preds = model.predict_proba(pred_X)
         return preds
+
 
     def predict_proba(self, data):
         """
         Returns predicted probabilities of each class
         """
         preds = self._get_predictions(data)
-        # get class names (labels)
         class_names = pipeline.get_class_names(self.preprocessor, model_cfg)
-        # get the name for the id field
-
-        # return te prediction df with the id and class probability fields
+        
         preds_df = data[[self.id_field_name]].copy()
-        preds_df[class_names[0]] = 1 - preds
-        preds_df[class_names[1]] = preds
+        preds_df[class_names] = preds
+        # preds_df[class_names[0]] = 1 - preds
+        # preds_df[class_names[1]] = preds
         # print(preds_df)
-
         return preds_df
 
     def predict_to_json(self, data):
         preds_df = self.predict_proba(data)
-        class_names = preds_df.columns[1:]
+        class_names = pipeline.get_class_names(self.preprocessor, model_cfg)
         preds_df["__label"] = pd.DataFrame(
             preds_df[class_names], columns=class_names
         ).idxmax(axis=1)
@@ -90,22 +88,19 @@ class ModelServer:
                 if k not in [self.id_field_name, "__label"]
             }
             predictions_response.append(pred_obj)
+        
+        print("predictions_response", predictions_response)
         return predictions_response
-    
-    
 
-    def predict(self, data):
-        preds = self._get_predictions(data)
 
-        # inverse transform the prediction probabilities to class labels
-        pred_classes = pipeline.get_inverse_transform_on_preds(
-            self.preprocessor, model_cfg, preds
-        )
-        # return te prediction df with the id and prediction fields
+    def predict(self, data):        
+        class_names = pipeline.get_class_names(self.preprocessor, model_cfg)
         preds_df = data[[self.id_field_name]].copy()
-        preds_df["prediction"] = pred_classes
-
+        preds_df["prediction"] = pd.DataFrame(
+            self.predict_proba(data), columns=class_names
+        ).idxmax(axis=1)
         return preds_df
+
 
     def _get_target_class_proba(self, X):
         """
@@ -114,6 +109,7 @@ class ModelServer:
         model = self._get_model()
         preds = model.predict_proba(X)
         return preds[:, 1]
+        
 
     def explain_local(self, data):
 
@@ -135,9 +131,11 @@ class ModelServer:
         pred_X = proc_data["X"].astype(np.float)
         ids = proc_data["ids"]
 
-        pred_classes = model.predict(pred_X)
-        pred_target_class_prob = model.predict_proba(pred_X)[:, 1]
+        pred_classes = model.predict(pred_X).astype(np.int16)
+        pred_target_class_prob = model.predict_proba(pred_X)
 
+        class_names = pipeline.get_class_names(preprocessor, model_cfg)
+        print(class_names)
         # ------------------------------------------------------------------------------
         print(f"Generating local explanations for {pred_X.shape[0]} sample(s).")
         # create the shapley explainer
@@ -146,23 +144,41 @@ class ModelServer:
         # Get local explanations
         shap_values = explainer(pred_X)
 
+
         # ------------------------------------------------------------------------------
         # create pd dataframe of explanation scores
         N = pred_X.shape[0]
         explanations = []
         for i in range(N):
-            samle_expl_dict = {}
-            samle_expl_dict[self.id_field_name] = ids[i]
-            samle_expl_dict["predicted_class"] = pred_classes[i]
-            samle_expl_dict["predicted_class_prob"] = pred_target_class_prob[i]
-            samle_expl_dict["baseline_prob"] = shap_values.base_values[i]
+            pred_class_idx = int(pred_classes[i])
+            pred_class = class_names[pred_class_idx]
+            class_prob = pred_target_class_prob[i, pred_class_idx]
 
-            feature_impacts = {}
+            other_class = str(
+                class_names[0] if class_names[1] == pred_class else class_names[1]
+            )
+            print('pred class and prob', pred_class, class_prob)
+            print('other class and prob', other_class, 1 - class_prob)
+            probabilities = {
+                other_class: np.round(1 - class_prob, 5),
+                pred_class: np.round(class_prob, 5),
+            }
+
+            sample_expl_dict = {}
+            sample_expl_dict["baseline"] = np.round(shap_values.base_values[i], 5)
+
+            feature_scores = {}
             for f_num, feature in enumerate(shap_values.feature_names):
-                feature_impacts[feature] = round(shap_values.values[i][f_num], 4)
+                feature_scores[feature] = round(shap_values.values[i][f_num], 5)
 
-            samle_expl_dict["feature_impacts"] = feature_impacts
-            explanations.append(samle_expl_dict)
+            sample_expl_dict["feature_scores"] = feature_scores
+
+            explanations.append({
+                self.id_field_name: ids[i],
+                "label": pred_class,
+                "probabilities": probabilities,
+                "explanations": sample_expl_dict,
+            })
 
         # ------------------------------------------------------
         """
@@ -176,5 +192,6 @@ class ModelServer:
         # shap_values.data = shap_values.data[sample_idx]
         # shap.plots.waterfall(shap_values)
         # ------------------------------------------------------
+        explanations = {"predictions": explanations}
         explanations = json.dumps(explanations, cls=utils.NpEncoder, indent=2)
         return explanations
