@@ -64,7 +64,6 @@ def infer():
     # Do the prediction
     try:
         # Do the prediction
-        print(f"Invoked with {data.shape[0]} records")
         print(data)
         predictions = model_server.predict_to_json(data)
         return {
@@ -108,7 +107,7 @@ def explain():
     # Do the prediction
     try:
         explanations = model_server.explain_local(data)  # returns a json string object
-        return flask.Response(response=explanations, status=200, mimetype="text/csv")
+        return flask.Response(response=explanations, status=200, mimetype="application/json")
     except Exception as err:
         # Write out an error file. This will be returned as the failureReason to the client.
         trc = traceback.format_exc()
